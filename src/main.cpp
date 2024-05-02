@@ -54,6 +54,18 @@ std::regex translatePattern(R"(t\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+))");
 std::regex rotatePattern(R"(r\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+))");
 std::regex scalePattern(R"(s\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+))");
 
+struct PointLight {
+    glm::vec3 position;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+    float constant;
+    float linear;
+    float quadratic;
+};
+
+std::vector<PointLight> pointLights;
+
 // Fonction appelée lors du redimensionnement de la fenêtre
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
@@ -261,6 +273,39 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     camera.processMouseScroll(static_cast<float>(yoffset));
 }
 
+void drawPointLightCreationInterface() {
+    if (ImGui::Button("Add Point Light")) {
+        PointLight newLight = {
+            glm::vec3(0.0f), // Position
+            glm::vec3(0.1f), // Ambient
+            glm::vec3(0.8f), // Diffuse
+            glm::vec3(1.0f), // Specular
+            1.0f,            // Constant
+            0.09f,           // Linear
+            0.032f           // Quadratic
+        };
+        pointLights.push_back(newLight);
+    }
+
+    ImGui::Text("Point Lights:");
+    for (int i = 0; i < pointLights.size(); ++i) {
+        ImGui::PushID(i);
+        drawPointLightProperties(pointLights[i], i);
+        ImGui::PopID();
+    }
+}
+
+void drawPointLightProperties(PointLight &light, int index) {
+    ImGui::Text("Point Light %d:", index);
+    ImGui::DragFloat3("Position", &light.position[0], 0.1f);
+    ImGui::DragFloat3("Ambient", &light.ambient[0], 0.01f);
+    ImGui::DragFloat3("Diffuse", &light.diffuse[0], 0.01f);
+    ImGui::DragFloat3("Specular", &light.specular[0], 0.01f);
+    ImGui::DragFloat("Constant", &light.constant, 0.01f);
+    ImGui::DragFloat("Linear", &light.linear, 0.01f);
+    ImGui::DragFloat("Quadratic", &light.quadratic, 0.01f);
+}
+
 // Initialisation de Dear ImGui
 void initImGui() {
     IMGUI_CHECKVERSION();
@@ -284,43 +329,7 @@ void renderImGui() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // Code de l'interface utilisateur
-    static int numPointLights = 0;
-    if (ImGui::Begin("Point Lights")) {
-        if (ImGui::Button("Add Point Light")) {
-            numPointLights++;
-        }
-        // ...
-        ImGui::End();
-    }
-
-    // Rendu des points lumineux
-    for (int i = 0; i < numPointLights; i++) {
-        // Définition des propriétés du point lumineux
-        GLfloat lightPosition[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-        GLfloat lightAmbient[] = { 0.1f, 0.1f, 0.1f, 1.0f };
-        GLfloat lightDiffuse[] = { 0.8f, 0.8f, 0.8f, 1.0f };
-        GLfloat lightSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        GLfloat lightConstant[] = { 1.0f, 0.0f, 0.0f, 1.0f };
-        GLfloat lightLinear[] = { 0.0f, 1.0f, 0.0f, 1.0f };
-        GLfloat lightQuadratic[] = { 0.0f, 0.0f, 1.0f, 1.0f };
-
-        // Activation du point lumineux
-        glEnable(GL_LIGHT0 + i);
-        glLightfv(GL_LIGHT0 + i, GL_POSITION, lightPosition);
-        glLightfv(GL_LIGHT0 + i, GL_AMBIENT, lightAmbient);
-        glLightfv(GL_LIGHT0 + i, GL_DIFFUSE, lightDiffuse);
-        glLightfv(GL_LIGHT0 + i, GL_SPECULAR, lightSpecular);
-        glLightfv(GL_LIGHT0 + i, GL_CONSTANT_ATTENUATION, lightConstant);
-        glLightfv(GL_LIGHT0 + i, GL_LINEAR_ATTENUATION, lightLinear);
-        glLightfv(GL_LIGHT0 + i, GL_QUADRATIC_ATTENUATION, lightQuadratic);
-
-        // Mise à jour de la position des points lumineux
-        GLfloat lightPosition[] = { cameraPosition.x, cameraPosition.y, cameraPosition.z, 1.0f };
-        for (int i = 0; i < numPointLights; i++) {
-            glLightfv(GL_LIGHT0 + i, GL_POSITION, lightPosition);
-        }
-    }
+    drawPointLightCreationInterface();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -384,6 +393,24 @@ int main()
 
         // Rendu de Dear ImGui
         renderImGui();
+
+        // Mise à jour des uniformes de point light
+        objectShader.use();
+        objectShader.setInt("pointLightCount", pointLights.size());
+        for (int i = 0; i < pointLights.size(); ++i) {
+            objectShader.setVec3("pointLights[" + std::to_string(i) + "].position", pointLights[i].position);
+            objectShader.setVec3("pointLights[" + std::to_string(i) + "].ambient", pointLights[i].ambient);
+            objectShader.setVec3("pointLights[" + std::to_string(i) + "].diffuse", pointLights[i].diffuse);
+            objectShader.setVec3("pointLights[" + std::to_string(i) + "].specular", pointLights[i].specular);
+            objectShader.setFloat("pointLights[" + std::to_string(i) + "].constant", pointLights[i].constant);
+            objectShader.setFloat("pointLights[" + std::to_string(i) + "].linear", pointLights[i].linear);
+            objectShader.setFloat("pointLights[" + std::to_string(i) + "].quadratic", pointLights[i].quadratic);
+        }
+
+        // Dessin des GameObjects
+        for (const auto &gameObject : gameObjects) {
+            gameObject->draw(objectShader, camera);
+        }
 
         // On échange les buffers de la fenêtre pour que ce qu'on vient de dessiner soit visible
         glfwSwapBuffers(window);
